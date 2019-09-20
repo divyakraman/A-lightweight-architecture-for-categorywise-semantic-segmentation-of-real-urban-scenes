@@ -1,9 +1,10 @@
-#import numpy as np 
+import numpy as np 
 import torch
 import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+import math
 #import matplotlib.pyplot as plt  
 #import scipy.misc as smisc
 #import random
@@ -18,9 +19,9 @@ class FPN(nn.Module):
 		 self.conv2_bn = nn.BatchNorm2d(64)
 		 self.conv3 = nn.Conv2d(in_channels=64,out_channels=128,kernel_size=3,stride=2,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		 self.conv3_bn = nn.BatchNorm2d(128)
-		 self.lateral3 = nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.lateral2 = nn.Conv2d(in_channels=64,out_channels=64,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.lateral1 = nn.Conv2d(in_channels=32,out_channels=64,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.lateral3 = nn.Conv2d(in_channels=128,out_channels=64,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.lateral2 = nn.Conv2d(in_channels=64,out_channels=64,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.lateral1 = nn.Conv2d(in_channels=32,out_channels=64,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		 self.upsample3 = nn.Upsample(size=(81,81),mode='bilinear',align_corners=True)
 		 self.upsample2 = nn.Upsample(size=(163,163),mode='bilinear',align_corners=True)
 		 self.newft3_bn = nn.BatchNorm2d(64)
@@ -47,7 +48,7 @@ class FPN(nn.Module):
 		#Short code
 		ft1 = self.conv1_bn(F.relu(self.conv1(input))) #1*32*163*163
 		ft2 = self.conv2_bn(F.relu(self.conv2(ft1)))  #1*64*81*81
-		ft3 = self.conv3_bn(F.relu(self.conv1(ft3)))  #1*128*40*40  
+		ft3 = self.conv3_bn(F.relu(self.conv3(ft2)))  #1*128*40*40  
 		new_ft3 = self.newft3_bn(self.lateral3(ft3)) #1*64*40*40 ; name as lateral3
 		new_ft2 = self.newft2_bn(self.conv2_bn(self.lateral2(ft2)+self.upsample3(new_ft3))) #1*64*81*81
 		new_ft1 = self.newft1_bn(self.conv2_bn(self.lateral1(ft1)+self.upsample2(new_ft2))) #1*64*163*163
@@ -60,20 +61,20 @@ class SA(nn.Module):
 		 super(SA, self).__init__()
 		 #f,g,h are key value query maps for self attention. Self attention maps for each level of feature pyramid generated followed by upsampling 
 		 #to 327*327 which is the original image size.
-		 self.f3 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.g3 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.h3 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.f2 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.g2 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.h2 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.f1 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.g1 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.h1 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.f3 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.g3 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.h3 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.f2 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.g2 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.h2 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.f1 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.g1 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.h1 = nn.Conv2d(in_channels=64,out_channels=32,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		 self.downsample = nn.Conv2d(in_channels=96,out_channels=128,kernel_size=3,stride=2,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.conv1 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.conv2 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.conv3 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		 self.conv4 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.conv1 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.conv2 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.conv3 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		 self.conv4 = nn.Conv2d(in_channels=128,out_channels=128,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		 self.upsample = nn.Upsample(size=(163,163),mode='bilinear',align_corners=True)
 		 self.bn1 = nn.BatchNorm2d(32)
 		 self.bn2 = nn.BatchNorm2d(32)
@@ -85,7 +86,7 @@ class SA(nn.Module):
 		 self.bn_conv4 = nn.BatchNorm2d(128)
 
 
-	def matrixmul(a,b):
+	def matrixmul(self,a,b):
 		#a and b are 4 dimensional tensors batchsize*channels*height*width
 		out_shape = a.size()
 		output = torch.zeros(out_shape)
@@ -95,13 +96,13 @@ class SA(nn.Module):
 		 
 
 	def forward(self,new_ft1,new_ft2,new_ft3):
-		sa3 = matrixmul(F.softmax(matrixmul((self.f3(new_ft3)).permute(0,1,3,2),self.g3(new_ft3)),dim=1),self.h3(new_ft3))
+		sa3 = self.matrixmul(F.softmax(self.matrixmul((self.f3(new_ft3)).permute(0,1,3,2),self.g3(new_ft3)),dim=1),self.h3(new_ft3))
 		sa3 = self.bn3(sa3)
 		sa3 = self.upsample(sa3)
-		sa2 = matrixmul(F.softmax(matrixmul((self.f2(new_ft2)).permute(0,1,3,2),self.g2(new_ft3)),dim=1),self.h2(new_ft2))
+		sa2 = self.matrixmul(F.softmax(self.matrixmul((self.f2(new_ft2)).permute(0,1,3,2),self.g2(new_ft2)),dim=1),self.h2(new_ft2))
 		sa2 = self.upsample(sa2)
 		sa2 = self.bn2(sa2)
-		sa1 = matrixmul(F.softmax(matrixmul((self.f1(new_ft1)).permute(0,1,3,2),self.g1(new_ft1)),dim=1),self.h1(new_ft1))
+		sa1 = self.matrixmul(F.softmax(self.matrixmul((self.f1(new_ft1)).permute(0,1,3,2),self.g1(new_ft1)),dim=1),self.h1(new_ft1))
 		sa1 = self.bn3(sa1)
 		sa1 = self.upsample(sa1)
 		#All final self attention maps from all levels of feature pyramid of spatial resolution 327*327
@@ -159,11 +160,11 @@ class globalpool(nn.Module):
 		layer1 = self.conv8_bn(F.relu(self.conv8(global_maps)))
 		layer1 = self.conv9_bn(F.relu(self.conv9(global_maps)))
 		global_maps = global_maps+layer1
-
 		out = torch.cat((global_maps,object_sa_maps),dim=1)  #1*192*81*81
+		return out
 
 
-class dilatedResidualNetworks(nn.Module)
+class dilatedResidualNetworks(nn.Module):
 	def __init__(self,num_classes=30):
 		super(dilatedResidualNetworks,self).__init__()
 		self.downsample1 = nn.Conv2d(in_channels=192,out_channels=256,kernel_size=3,stride=2,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
@@ -173,8 +174,8 @@ class dilatedResidualNetworks(nn.Module)
 		self.conv2 = nn.Conv2d(in_channels=256,out_channels=256,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		self.conv1_bn = nn.BatchNorm2d(256)
 		self.conv2_bn = nn.BatchNorm2d(256)
-		self.conv3 = nn.Conv2d(in_channels=256,out_channels=64,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
-		self.conv4 = nn.Conv2d(in_channels=256,out_channels=64,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		self.conv3 = nn.Conv2d(in_channels=256,out_channels=256,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		self.conv4 = nn.Conv2d(in_channels=256,out_channels=256,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		self.conv3_bn = nn.BatchNorm2d(256)
 		self.conv4_bn = nn.BatchNorm2d(256)
 		#Dilation 2, 2 residual blocks
@@ -182,12 +183,12 @@ class dilatedResidualNetworks(nn.Module)
 		self.conv6 = nn.Conv2d(in_channels=256,out_channels=256,kernel_size=3,stride=1,padding=2,dilation=2,groups=1,bias=True,padding_mode='zeros')
 		self.conv5_bn = nn.BatchNorm2d(256)
 		self.conv6_bn = nn.BatchNorm2d(256)
-		self.conv7 = nn.Conv2d(in_channels=256,out_channels=64,kernel_size=3,stride=1,padding=2,dilation=2,groups=1,bias=True,padding_mode='zeros')
-		self.conv8 = nn.Conv2d(in_channels=256,out_channels=64,kernel_size=3,stride=1,padding=2,dilation=2,groups=1,bias=True,padding_mode='zeros')
+		self.conv7 = nn.Conv2d(in_channels=256,out_channels=256,kernel_size=3,stride=1,padding=2,dilation=2,groups=1,bias=True,padding_mode='zeros')
+		self.conv8 = nn.Conv2d(in_channels=256,out_channels=256,kernel_size=3,stride=1,padding=2,dilation=2,groups=1,bias=True,padding_mode='zeros')
 		self.conv7_bn = nn.BatchNorm2d(256)
 		self.conv8_bn = nn.BatchNorm2d(256)
 		#Add more channels
-		self.deeper = nn.Conv2d(in_channels=256,out_channels=512,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		self.deeper = nn.Conv2d(in_channels=256,out_channels=512,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		self.deeper_bn = nn.BatchNorm2d(512)
 		#Dilation 4, 2 residual blocks
 		self.conv9 = nn.Conv2d(in_channels=512,out_channels=512,kernel_size=3,stride=1,padding=4,dilation=4,groups=1,bias=True,padding_mode='zeros')
@@ -209,7 +210,7 @@ class dilatedResidualNetworks(nn.Module)
 		self.conv15_bn = nn.BatchNorm2d(512)
 		self.conv16_bn = nn.BatchNorm2d(512)
 		#Generate segmentation maps
-		self.seg = nn.Conv2d(in_channels=512,out_channels=num_classes,kernel_size=1,stride=1,padding=0,dilation=1,groups=1,bias=True,padding_mode='zeros')
+		self.seg = nn.Conv2d(in_channels=512,out_channels=num_classes,kernel_size=3,stride=1,padding=1,dilation=1,groups=1,bias=True,padding_mode='zeros')
 		self.softmax = nn.LogSoftmax()
 		#Initializing final layer
 		m = self.seg
@@ -257,3 +258,18 @@ class dilatedResidualNetworks(nn.Module)
 		upsample = self.upsample(seg)
 		return self.softmax(upsample),seg
 		
+
+class full_model(nn.Module):
+	def __init__(self):
+		super(full_model,self).__init__()
+		self.fpn = FPN()
+		self.sa = SA()
+		self.globalPool = globalpool()
+		self.drn = dilatedResidualNetworks()
+
+	def forward(self, input, num_classes=30):
+		ft1,ft2,ft3 = self.fpn.forward(input)
+		self_attention_maps = self.sa.forward(ft1,ft2,ft3)
+		globalPool = self.globalPool.forward(input,self_attention_maps)
+		upsampledSeg,seg = self.dilatedResidualNetworks(globalPool, num_classes)
+		return upsampledSeg,seg
