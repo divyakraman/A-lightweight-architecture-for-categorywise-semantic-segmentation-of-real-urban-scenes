@@ -1,3 +1,3 @@
 # Code
 
-Description to be added
+Description of repository to be added
