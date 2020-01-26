@@ -1,48 +1,50 @@
-#References: https://github.com/wasidennis/AdaptSegNet/blob/master/compute_iou.py, https://github.com/jhoffman/cycada_release/blob/master/scripts/eval_fcn.py
-
 import numpy as np
 import matplotlib.pyplot as plt
 import glob
 import imageio
 import torch
 import torch.nn.functional as F
-from drivableArea_model import *
+from drn_model import *
 import torch.optim as optim
 import os
 from PIL import Image 
 
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID" 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
-
-torch.cuda.empty_cache() #clear cached memory
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 #dtype = torch.FloatTensor #CPU
-dtype = torch.cuda.FloatTensor #GPU; https://pytorch.org/docs/stable/tensors.html
+dtype = torch.cuda.FloatTensor #GPU
 
-#train_folder_imgs = '/media/data2/ee15b085/BerkeleyDeepDrive/bdd100k_seg/bdd100k/seg/images/train'
+train_folder_imgs = '/media/data2/ee15b085/BerkeleyDeepDrive/bdd100k_seg/bdd100k/seg/images/train'
 val_folder_imgs = '/media/data2/ee15b085/BerkeleyDeepDrive/bdd100k_seg/bdd100k/seg/images/val'
 
-#train_folder_labels = '/media/data2/ee15b085/BerkeleyDeepDrive/bdd100k_seg/bdd100k/seg/labels/train'
+train_folder_labels = '/media/data2/ee15b085/BerkeleyDeepDrive/bdd100k_seg/bdd100k/seg/labels/train'
 val_folder_labels = '/media/data2/ee15b085/BerkeleyDeepDrive/bdd100k_seg/bdd100k/seg/labels/val'
 
-#train_labels_list = glob.glob(train_folder_labels+"/*.png")
+train_labels_list = glob.glob(train_folder_labels+"/*.png")
 val_labels_list = glob.glob(val_folder_labels+"/*.png")
-#train_images_list = glob.glob(train_folder_imgs+"/*.jpg") #7000 images
+train_images_list = glob.glob(train_folder_imgs+"/*.jpg") #7000 images
 val_images_list = glob.glob(val_folder_imgs+"/*.jpg") #1000 images
 
-#train_labels_list.sort()
+train_labels_list.sort()
 val_labels_list.sort()
-#train_images_list.sort()
+train_images_list.sort()
 val_images_list.sort()
 
+batch_size = 1 #train one image at a time, entire image
+step_size = 1
+iterations = len(train_images_list)
+epochs = 15
+num_classes = 7
 
-batch_size = 1
-iterations = len(val_images_list)
-num_classes = 7 #6
+learning_rate = 1e-3
+momentum = 0.9
+power = 0.9
+weight_decay = 0.0005
 
 '''
-#6 classes
+6 classes
 colors = [ [128,64,128], 
 [244,35,232], 
 [70,70,70], 
@@ -61,7 +63,6 @@ colors = [[128,64,128],
 [0,0,142]]
 
 
-
 def get_data(iter_num):
 	#images = torch.zeros([batch_size,3,360,640])
 	images = torch.zeros([batch_size,3,720,1280])
@@ -70,7 +71,7 @@ def get_data(iter_num):
 	#labels = torch.zeros([batch_size,360,640])
 	labels = labels.cuda()
 	#RGB_image = imageio.imread(train_images_list[int(iter_num)]) #720*1280*3
-	RGB_image = Image.open(val_images_list[int(iter_num)]) #1024*2048*3
+	RGB_image = Image.open(train_images_list[int(iter_num)]) #1024*2048*3
 	#RGB_image = Image.fromarray(RGB_image, 'RGB')
 	#RGB_image = RGB_image.resize((640,360), Image.BILINEAR)
 	RGB_image = np.array(RGB_image) #downsample image by 2
@@ -81,7 +82,7 @@ def get_data(iter_num):
 	images[0,:,:,:] = RGB_image
 	del RGB_image
 	#label_image = imageio.imread(train_labels_list[int(iter_num)]) #1024*2048
-	label_image = Image.open(val_labels_list[int(iter_num)]) #1024*2048
+	label_image = Image.open(train_labels_list[int(iter_num)]) #1024*2048
 	#label_image = Image.fromarray(label_image)
 	#label_image = label_image.resize((640,360), Image.NEAREST)
 	label_image = np.array(label_image) 
@@ -112,7 +113,17 @@ def get_data(iter_num):
 
 	return images,labels
 
+#net = full_model()
+#net = net.cuda()
+net = torch.load('models/drivable_drn_bdd_10epochs.pth')
 
+parameters = net.parameters()
+
+optimizer = optim.SGD(parameters, lr = learning_rate, momentum = momentum, weight_decay = weight_decay)
+optimizer.zero_grad()
+loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)  #https://pytorch.org/docs/master/_modules/torch/nn/modules/loss.html#CrossEntropyLoss
+ 
+hist = np.zeros((num_classes,num_classes))
 def fast_hist(a,b,n):
 	k = (a>=0) & (a<n)
 	return np.bincount(n*a[k].astype(int)+b[k], minlength=n**2).reshape(n,n)
@@ -121,55 +132,42 @@ def per_class_iu(hist):
 	return np.diag(hist)/(hist.sum(1)+hist.sum(0)-np.diag(hist))
 
 
-net = torch.load('models/drivable_drn_bdd_15epochs.pth')
-
-
-hist = np.zeros((num_classes,num_classes))
-for iteration in range(1,1000):
-#for iteration in range(len(val_labels_list)):
-	images, label_ss = get_data(iteration)
-	images = images.type(dtype)
-	label_ss = label_ss.type(dtype)
-	#pred_labels_upsampled, globalPoolMap = net(images)
-	pred_labels_upsampled = net(images) #For GCN
-	pred_labels_upsampled = pred_labels_upsampled.detach()
-	pred_labels_upsampled = pred_labels_upsampled.cpu()
-	pred_labels_upsampled = pred_labels_upsampled.numpy()
-	#del globalPoolMap
-	#prediction_labels = np.zeros((1024,2048))
-	pred_labels_upsampled = pred_labels_upsampled[0,:,:,:]
-	pred_labels_upsampled = np.argmax(pred_labels_upsampled,0)
-	label_ss = label_ss.cpu()
-	label_ss = label_ss.numpy()
-	label_ss = label_ss[0,:,:]
-	accuracy = sum(sum(label_ss==pred_labels_upsampled))#/(720*1280)
-	print(accuracy)
-	pred_color_labels = np.zeros((720,1280,3))
-	#pred_color_labels = np.zeros((360,640,3)) 
-	for i in range(len(colors)):
-		pred_color_labels[np.where(pred_labels_upsampled==i)]=colors[i]
-	image_name = str(iteration)+'.jpg'
-	pred_color_labels = pred_color_labels/255.0
-	#plt.imsave(image_name,pred_color_labels)
-	hist += fast_hist(label_ss.flatten(), pred_labels_upsampled.flatten(), num_classes)
-	torch.cuda.empty_cache() #clear cached memory
-	print(iteration)
-
-mIoUs = per_class_iu(hist)
-
-
-for ind_class in range(num_classes):
-	print('===> Class '+str(ind_class)+':\t'+str(round(mIoUs[ind_class] * 100, 2)))
-
-print('===> mIoU: ' + str(round(np.nanmean(mIoUs) * 100, 2)))
-
-
-print('===> Accuracy Overall: ' + str(np.diag(hist).sum() / hist.sum() * 100))
-acc_percls = np.diag(hist) / (hist.sum(1) + 1e-8) 
-
-for ind_class in range(num_classes):
-	print('===> Class '+str(ind_class)+':\t'+str(round(acc_percls[ind_class] * 100, 2))) 
-
+for epoch in range(10,15):
+	hist = np.zeros((num_classes,num_classes))
+	loss = 0
+	new_lr = learning_rate * ((1 - float(epoch) / epochs) ** (power)) # Find new learning rate
+	for param_group in optimizer.param_groups:
+		param_group['lr'] = new_lr  # Update new learning rate
+	for iteration in range(iterations):
+		images, label_ss = get_data(iteration)
+		images = images.type(dtype)
+		label_ss = label_ss.type(dtype)
+		pred_labels_upsampled = net(images)
+		label_ss = label_ss.long()
+		loss = loss_fn(pred_labels_upsampled, label_ss) 
+		loss = loss/step_size
+		loss.backward()
+		if(iteration%step_size==0):
+			optimizer.step()
+			optimizer.zero_grad()
+		pred_labels_upsampled = pred_labels_upsampled.detach()
+		pred_labels_upsampled = pred_labels_upsampled.cpu()
+		pred_labels_upsampled = pred_labels_upsampled.numpy()
+		prediction_labels = np.argmax(pred_labels_upsampled,1)
+		label_ss = label_ss.cpu()
+		label_ss = label_ss.numpy()
+		accuracy = sum(sum(sum(label_ss==prediction_labels)))/(720*1280)
+		print("Epoch ",epoch, " Iteration ",iteration, " Accuracy is ",accuracy)
+		hist = hist + fast_hist(label_ss.flatten(), prediction_labels.flatten(), num_classes)
+		mIoUs = per_class_iu(hist)
+		print('===> mIoU: ' + str(round(np.nanmean(mIoUs) * 100, 2)))
+		torch.cuda.empty_cache() #clear cached memory
+		print(np.sum(prediction_labels),np.sum(label_ss))
+		if(iteration%100==0):
+			torch.save(net, 'models/drivable_drn_bdd_15epochs.pth')
+			mIoUs = per_class_iu(hist)
+			for ind_class in range(num_classes):
+				print('===> Class '+str(ind_class)+':\t'+str(round(mIoUs[ind_class] * 100, 2)))
 
 
 

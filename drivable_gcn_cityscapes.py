@@ -4,7 +4,7 @@ import glob
 import imageio
 import torch
 import torch.nn.functional as F
-from drivableArea_deconv_model import *
+from drn_model import *
 import torch.optim as optim
 import os
 from PIL import Image
@@ -40,7 +40,7 @@ val_images_list.sort()
 batch_size = 1 #train one image at a time, entire image
 step_size = 1
 iterations = len(train_images_list)
-epochs = 40
+epochs = 50
 #num_classes = 6
 num_classes = 7
 
@@ -124,7 +124,7 @@ def get_data(iter_num):
 
 #net = full_model()
 #net = net.cuda()
-net = torch.load('models/drivable_deconv_cityscapes_30epochs.pth')
+net = torch.load('models/drivable_gcn_cityscapes_40epochs.pth')
 
 parameters = net.parameters()
 
@@ -141,7 +141,7 @@ def per_class_iu(hist):
 	return np.diag(hist)/(hist.sum(1)+hist.sum(0)-np.diag(hist))
 
 
-for epoch in range(30,epochs):
+for epoch in range(38,50):
 	hist = np.zeros((num_classes,num_classes))
 	loss = 0
 	new_lr = learning_rate * ((1 - float(epoch) / epochs) ** (power)) # Find new learning rate
@@ -151,7 +151,7 @@ for epoch in range(30,epochs):
 		images, label_ss = get_data(iteration)
 		images = images.type(dtype)
 		label_ss = label_ss.type(dtype)
-		pred_labels_upsampled, globalPoolMap = net(images)
+		pred_labels_upsampled = net(images)
 		label_ss = label_ss.long()
 		loss = loss_fn(pred_labels_upsampled, label_ss) 
 		loss = loss/step_size
@@ -173,7 +173,7 @@ for epoch in range(30,epochs):
 		torch.cuda.empty_cache() #clear cached memory
 		print(np.sum(prediction_labels),np.sum(label_ss))
 		if(iteration%100==0):
-			torch.save(net, 'models/drivable_deconv_cityscapes_40epochs.pth')
+			torch.save(net, 'models/drivable_gcn_cityscapes_50epochs.pth')
 			mIoUs = per_class_iu(hist)
 			for ind_class in range(num_classes):
 				print('===> Class '+str(ind_class)+':\t'+str(round(mIoUs[ind_class] * 100, 2)))

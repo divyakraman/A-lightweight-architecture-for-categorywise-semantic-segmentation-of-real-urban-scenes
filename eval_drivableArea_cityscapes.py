@@ -63,21 +63,21 @@ colors = [[128,64,128],
 [0,0,142]]
 
 def get_data(iter_num):
-	#images = torch.zeros([batch_size,3,512,1024])
-	images = torch.zeros([batch_size,3,1024,2048])
+	images = torch.zeros([batch_size,3,512,1024])
+	#images = torch.zeros([batch_size,3,1024,2048])
 	images = images.cuda()
-	RGB_image = imageio.imread(val_images_list[int(iter_num)]) #1024*2048*3
-	#RGB_image = Image.open(val_images_list[int(iter_num)]) #1024*2048*3
-	#RGB_image = RGB_image.resize((1024,512), Image.BILINEAR)
+	#RGB_image = imageio.imread(val_images_list[int(iter_num)]) #1024*2048*3
+	RGB_image = Image.open(val_images_list[int(iter_num)]) #1024*2048*3
+	RGB_image = RGB_image.resize((1024,512), Image.BILINEAR)
 	RGB_image = np.array(RGB_image) #downsample image by 2
 	RGB_image = RGB_image/255.0
 	RGB_image = torch.from_numpy(RGB_image)
 	RGB_image = RGB_image.cuda()
 	RGB_image = RGB_image.permute(2,0,1)#3*1024*2048
 	images[0,:,:,:] = RGB_image
-	label_image = imageio.imread(val_labels_list[int(iter_num)]) #1024*2048
-	#label_image = Image.open(val_labels_list[int(iter_num)]) #1024*2048
-	#label_image = label_image.resize((1024,512), Image.NEAREST)
+	#label_image = imageio.imread(val_labels_list[int(iter_num)]) #1024*2048
+	label_image = Image.open(val_labels_list[int(iter_num)]) #1024*2048
+	label_image = label_image.resize((1024,512), Image.NEAREST)
 	label_image = np.array(label_image)
 
 	label_image[np.where(label_image == 0)] = 255
@@ -118,8 +118,8 @@ def get_data(iter_num):
 
 	label_image = torch.from_numpy(label_image)
 	label_image = label_image.cuda()
-	labels = torch.zeros([batch_size,1024,2048])
-	#labels = torch.zeros([batch_size,512,1024])
+	#labels = torch.zeros([batch_size,1024,2048])
+	labels = torch.zeros([batch_size,512,1024])
 	labels[0,:,:] = label_image
 	
 	del RGB_image,label_image
@@ -133,29 +133,30 @@ def per_class_iu(hist):
 	return np.diag(hist)/(hist.sum(1)+hist.sum(0)-np.diag(hist))
 
 #net = torch.load('models/drivableArea_cityscapes.pth')
-net = torch.load('models/drivableArea_cityscapes_7classes_30epochs.pth')
+net = torch.load('models/drivable_fpn_cityscapes_20epochs.pth')
 
 hist = np.zeros((num_classes,num_classes))
-#for iteration in range(5):
-for iteration in range(len(val_labels_list)):
+for iteration in range(0,500): #326 to 332
+#for iteration in range(len(val_labels_list)):
 	images, label_ss = get_data(iteration)
 	images = images.type(dtype)
 	label_ss = label_ss.type(dtype)
-	pred_labels_upsampled, globalPoolMap = net(images)
+	#pred_labels_upsampled, globalPoolMap = net(images)
+	pred_labels_upsampled = net(images) # For GCN
 	pred_labels_upsampled = pred_labels_upsampled.detach()
 	pred_labels_upsampled = pred_labels_upsampled.cpu()
 	pred_labels_upsampled = pred_labels_upsampled.numpy()
-	del globalPoolMap
+	#del globalPoolMap
 	#prediction_labels = np.zeros((1024,2048))
 	pred_labels_upsampled = pred_labels_upsampled[0,:,:,:]
 	pred_labels_upsampled = np.argmax(pred_labels_upsampled,0)
 	label_ss = label_ss.cpu()
 	label_ss = label_ss.numpy()
 	label_ss = label_ss[0,:,:]
-	accuracy = sum(sum(label_ss==pred_labels_upsampled))#/(720*1280)
+	accuracy = sum(sum(label_ss==pred_labels_upsampled))/(512*1024)
 	print(accuracy)
-	pred_color_labels = np.zeros((1024,2048,3))
-	#pred_color_labels = np.zeros((512,1024,3))
+	#pred_color_labels = np.zeros((1024,2048,3))
+	pred_color_labels = np.zeros((512,1024,3))
 	for i in range(len(colors)):
 		pred_color_labels[np.where(pred_labels_upsampled==i)]=colors[i]
 	image_name = str(iteration)+'.jpg'
@@ -177,9 +178,4 @@ acc_percls = np.diag(hist) / (hist.sum(1) + 1e-8)
 
 for ind_class in range(num_classes):
 	print('===> Class '+str(ind_class)+':\t'+str(round(acc_percls[ind_class] * 100, 2))) 
-
-
-
-
-
 
